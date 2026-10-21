@@ -58,7 +58,7 @@ Reproduces the stale-pointer write on stock PHP-FPM (no ASAN, no debug build).
 
 ```bash
 # Clone and enter
-git clone https://github.com/YOUR_ORG/php2shell
+git clone https://github.com/syrex1013/php2shell
 cd php2shell/lab-uaf
 
 # Build and start
