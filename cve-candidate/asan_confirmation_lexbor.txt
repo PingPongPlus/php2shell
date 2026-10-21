@@ -1,0 +1,38 @@
+ASAN Confirmation: heap-buffer-overflow in :lexbor-contains() CSS selector
+PHP 8.4.28-dev ASAN build — pseudo_state.c with fix reverted
+Date: 2026-10-21
+
+Command:
+  USE_ZEND_ALLOC=0 ASAN_OPTIONS=detect_leaks=0 /tmp/php-src/sapi/cli/php lexbor_asan.php
+
+Input:
+  $doc->querySelectorAll(':lexbor-contains("' . str_repeat('needle', 1024) . '")');
+
+Output:
+=================================================================
+==88658==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x62100001dd08 at pc 0x000104102bb4 bp 0x00016db1ffd0 sp 0x00016db1f780
+WRITE of size 6145 at 0x62100001dd08 thread T0
+    #0 0x000104102bb0 in __asan_memcpy+0x330 (libclang_rt.asan_osx_dynamic.dylib:arm64e+0x3ebb0)
+    #1 0x0001025992d8 in lxb_css_selectors_state_pseudo_class_function_lexbor_contains pseudo_state.c:235
+    #2 0x0001025aa254 in lxb_css_syntax_parser_run parser.c:269
+    #3 0x00010259f490 in lxb_css_selectors_parse_list selectors.c:259
+    #4 0x0001025253a4 in dom_parse_selector css_selectors.c:93
+    #5 0x000102524914 in dom_query_selector_common css_selectors.c:140
+    #6 0x000102524b18 in dom_parent_node_query_selector_all css_selectors.c:237
+    #7 0x0001024fdaf0 in php_dom_dispatch_query_selector element.c:1834
+    #8 0x000102bc90b8 in ZEND_DO_FCALL_SPEC_RETVAL_USED_HANDLER zend_vm_execute.h
+    #9 0x000102b3853c in execute_ex zend_vm_execute.h:58729
+
+0x62100001dd08 is located 0 bytes after 4104-byte region [0x62100001cd00,0x62100001dd08)
+allocated by thread T0 here:
+    #0 0x000104105164 in malloc+0x78 (libclang_rt.asan_osx_dynamic.dylib:arm64e+0x41164)
+    #1 0x000102a32d34 in __zend_malloc zend_alloc.c:3699
+    #2 0x000102574968 in lexbor_mem_init mem.c:30
+    #3 0x000102575348 in lexbor_mraw_init mraw.c:53
+    #4 0x00010257c1ac in lxb_css_memory_init css.c:63
+    #5 0x00010259f338 in lxb_css_selectors_parse_list selectors.c:238
+    #6 0x0001025253a4 in dom_parse_selector css_selectors.c:93
+    #7 0x000102524914 in dom_query_selector_common css_selectors.c:140
+    #8 0x000102524b18 in dom_parent_node_query_selector_all css_selectors.c:237
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow pseudo_state.c:235 in lxb_css_selectors_state_pseudo_class_function_lexbor_contains

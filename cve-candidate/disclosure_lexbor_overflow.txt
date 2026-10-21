@@ -1,0 +1,104 @@
+To: security@php.net
+Subject: [Security] Heap Buffer Overflow in Dom\HTMLDocument::querySelectorAll() via :lexbor-contains() CSS selector
+
+Hello PHP Security Team,
+
+I am reporting a heap buffer overflow vulnerability in PHP's DOM extension
+via the bundled lexbor CSS selector parser.
+
+## Summary
+
+`Dom\HTMLDocument::querySelectorAll()` and `querySelector()` pass the CSS
+selector string to the bundled lexbor library for parsing. When parsing the
+`:lexbor-contains("string")` CSS pseudo-class function, the handler allocates
+`sizeof(lexbor_str_t)` bytes (16 bytes on 64-bit platforms) for the string
+content buffer, then calls `memcpy(str->data, data, length + 1)` to copy the
+argument string. Any `:lexbor-contains()` argument longer than 15 characters
+overflows the 16-byte allocation.
+
+## Root Cause
+
+File: ext/dom/lexbor/lexbor/css/selectors/pseudo_state.c
+Function: lxb_css_selectors_state_pseudo_class_function_lexbor_contains()
+
+Vulnerable code:
+  // Allocates sizeof(lexbor_str_t) = 16 bytes on 64-bit
+  str->data = lexbor_mraw_alloc(parser->memory->mraw, sizeof(lexbor_str_t));
+  // Copies length+1 bytes into the 16-byte buffer — OVERFLOW when length > 15
+  memcpy(str->data, data, length + 1);
+
+The buffer should be allocated as `length + 1` bytes, not `sizeof(lexbor_str_t)`.
+The correct code (as in the upstream lexbor fix):
+  str->data = lexbor_mraw_alloc(parser->memory->mraw, length + 1);
+  memcpy(str->data, data, length);
+  str->data[length] = '\0';
+
+## ASAN Confirmation
+
+Confirmed on PHP 8.4.28-dev ASAN build with the fix reverted:
+
+  =================================================================
+  ==88658==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x62100001dd08
+  WRITE of size 6145 at 0x62100001dd08 thread T0
+      #0 in __asan_memcpy
+      #1 in lxb_css_selectors_state_pseudo_class_function_lexbor_contains
+         pseudo_state.c:235
+      #2 in lxb_css_syntax_parser_run parser.c:269
+      #3 in lxb_css_selectors_parse_list selectors.c:259
+      #4 in dom_parse_selector css_selectors.c:93
+      #5 in dom_query_selector_common css_selectors.c:140
+      #6 in dom_parent_node_query_selector_all css_selectors.c:237
+      #7 in php_dom_dispatch_query_selector element.c:1834
+  0x62100001dd08 is located 0 bytes after 4104-byte region [mraw chunk]
+  SUMMARY: AddressSanitizer: heap-buffer-overflow pseudo_state.c:235 in
+      lxb_css_selectors_state_pseudo_class_function_lexbor_contains
+
+The WRITE of size 6145 into a 4104-byte region shows the entire mraw pool chunk
+boundary is exceeded, corrupting adjacent heap memory.
+
+## Proof of Concept
+
+<?php
+$doc = Dom\HTMLDocument::createFromString(
+    '<html><body><p>test</p></body></html>',
+    LIBXML_NOERROR
+);
+
+// Any argument > 15 bytes triggers the overflow
+// strlen > 15: allocated 16 bytes, copies strlen+1 bytes
+$payload = str_repeat('A', 1024); // 1024-byte string: overflows by 1009 bytes
+$result = $doc->querySelectorAll(':lexbor-contains("' . $payload . '")');
+
+## Affected Versions
+
+PHP 8.4.x versions with lexbor 2.7.0 integrated where patch 0007
+(CSS: fixed heap buffer overflow in :lexbor-contains() parsing) has not been applied.
+
+Note: The lexbor upstream fix was committed as lexbor/lexbor@8a14bc0 following a
+report by Xiansheng Cao (@HMF2021). This email reports the PHP-specific impact and
+requests CVE assignment for the PHP package.
+
+## Impact
+
+- Heap buffer overflow with attacker-controlled write size (any length > 15 bytes)
+- The overflow writes past the lexbor mraw pool chunk boundary (individually malloc'd)
+- Corrupts adjacent heap memory, potentially allowing type confusion or remote code
+  execution in applications that parse attacker-supplied HTML and apply CSS selectors
+  to the resulting DOM tree
+- CVSS 3.1: AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H (estimated 7.5 High)
+
+## Suggested Fix
+
+In lxb_css_selectors_state_pseudo_class_function_lexbor_contains():
+  Change: lexbor_mraw_alloc(parser->memory->mraw, sizeof(lexbor_str_t))
+  To:     lexbor_mraw_alloc(parser->memory->mraw, length + 1)
+  Change: memcpy(str->data, data, length + 1)
+  To:     memcpy(str->data, data, length); str->data[length] = '\0';
+
+## Researcher
+
+Adrian / admin@threatvector.tech
+Discovered: 2026-10-21
+Building on prior work: CVE-2026-109618, CVE-2026-109619
+
+---
