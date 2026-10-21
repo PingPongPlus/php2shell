@@ -1,0 +1,4 @@
+services:
+  php-vuln:
+    volumes:
+      - ./conf/php-mitigated.ini:/usr/local/etc/php/php.ini:ro

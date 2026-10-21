@@ -1,0 +1,11 @@
+services:
+  php-vuln:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php2shell-lab
+    ports:
+      - "19268:80"
+      - "19269:9000"
+    cap_add:
+      - SYS_PTRACE
