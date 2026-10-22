@@ -1,3 +1,4 @@
+<!-- GitAds-Verify: M6GZ4VLQ7VQKZG9AG2DO6O2M5IN4JO1Z -->
 # php2shell — CVE-2026-109618 / CVE-2026-109619 PoC
 
 > **Heap Use-After-Free in PHP `session.upload_progress`**  
