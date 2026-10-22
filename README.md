@@ -223,3 +223,7 @@ The vendor fix removes the long-lived `zval*` cache in `php_session_rfc1867_call
 This code is for authorized security testing, research, and education only. The authors are not responsible for any unauthorized use. Run this only against systems you own or have explicit written permission to test.
 
 Licensed under the [MIT License](LICENSE).
+
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=syrex1013/php2shell@github)](https://gitads.dev/v1/ad-track?source=syrex1013/php2shell@github)
+
